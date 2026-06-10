@@ -23,15 +23,17 @@ export function useApi() {
   };
 
   return {
-    search:       (params) => { const q = new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([,v]) => v !== undefined && v !== ""))); return get(`/api/comics/search?${q}`); },
-    getComic:     (id) => get(`/api/comics/${id}`),
-    getSimilar:   (id) => get(`/api/comics/${id}/similar`).catch(() => []),
-    getSuggest:   (prefix) => get(`/api/suggest/${encodeURIComponent(prefix)}`).catch(() => []),
-    getAnalytics: () => get("/api/analytics"),
-    getGifts:     () => get("/api/gifts"),
-    addComic:     (data) => post("/api/comics", data),
-    updateComic:  (id, data) => put(`/api/comics/${id}`, data),
-    addGift:      (id, data) => patch(`/api/comics/${id}/gift`, data),
-    checkHealth:  () => fetch(`${API_BASE}/health`).then(r => r.ok).catch(() => false),
+    search:        (params) => { const q = new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([,v]) => v !== undefined && v !== ""))); return get(`/api/comics/search?${q}`); },
+    getComic:      (id) => get(`/api/comics/${id}`),
+    getSimilar:    (id) => get(`/api/comics/${id}/similar`).catch(() => []),
+    getSuggest:    (prefix) => get(`/api/suggest/${encodeURIComponent(prefix)}`).catch(() => []),
+    getAnalytics:  () => get("/api/analytics"),
+    getAnalysis:   () => get("/api/analysis"),
+    getGifts:      () => get("/api/gifts"),
+    getGiftPeople: () => get("/api/gift-people"),
+    addComic:      (data) => post("/api/comics", data),
+    updateComic:   (id, data) => put(`/api/comics/${id}`, data),
+    addGift:       (id, data) => patch(`/api/comics/${id}/gift`, data),
+    checkHealth:   () => fetch(`${API_BASE}/health`).then(r => r.ok).catch(() => false),
   };
 }
