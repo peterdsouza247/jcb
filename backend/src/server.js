@@ -19,7 +19,7 @@ const INDEX = "comics";
 app.get("/health", async (req, res) => {
   try {
     const info = await es.info();
-    res.json({ status: "ok", elasticsearch: info.version });
+    res.json({ status: "ok", elasticsearch: info.body?.version || info.version });
   } catch (err) {
     res.status(503).json({ status: "error", message: err.message });
   }
@@ -42,16 +42,14 @@ app.get("/api/comics/search", async (req, res) => {
     });
   }
 
-  if (publisher) filter.push({ term: { "publisher.keyword": publisher } });
-  if (genre)     filter.push({ term: { "genre.keyword": genre } });
-  if (tag)       filter.push({ term: { tags: tag } });
-  if (owned !== undefined)       filter.push({ term: { owned: owned === "true" } });
+  if (publisher)         filter.push({ term: { "publisher.keyword": publisher } });
+  if (genre)             filter.push({ term: { "genre.keyword": genre } });
+  if (tag)               filter.push({ term: { tags: tag } });
+  if (owned !== undefined)        filter.push({ term: { owned: owned === "true" } });
   if (on_wish_list !== undefined) filter.push({ term: { on_wish_list: on_wish_list === "true" } });
-  if (read !== undefined)        filter.push({ term: { read: read === "true" } });
-
-  // gifted filter: "given" = has gifted_to entries, "received" = has gifted_by
-  if (gifted === "given")    filter.push({ nested: { path: "gifted_to", query: { match_all: {} } } });
-  if (gifted === "received") filter.push({ exists: { field: "gifted_by.person" } });
+  if (read !== undefined)         filter.push({ term: { read: read === "true" } });
+  if (gifted === "given")         filter.push({ nested: { path: "gifted_to", query: { match_all: {} } } });
+  if (gifted === "received")      filter.push({ exists: { field: "gifted_by.person" } });
 
   const sortOptions = {
     relevance: ["_score"],
@@ -72,34 +70,33 @@ app.get("/api/comics/search", async (req, res) => {
         from,
         size: parseInt(size),
         aggs: {
-          publishers: { terms: { field: "publisher.keyword", size: 20 } },
-          genres:     { terms: { field: "genre.keyword", size: 20 } },
-          tags:       { terms: { field: "tags", size: 20 } },
-          owned_count:      { filter: { term: { owned: true } } },
-          wish_list_count:  { filter: { term: { on_wish_list: true } } },
-          read_count:       { filter: { term: { read: true } } },
-          unread_count: { filter: { bool: { filter: [{ term: { owned: true } }, { term: { read: false } }] } } },
-          // Gifted aggs using nested query
+          publishers:      { terms: { field: "publisher.keyword", size: 20 } },
+          genres:          { terms: { field: "genre.keyword", size: 20 } },
+          tags:            { terms: { field: "tags", size: 20 } },
+          owned_count:     { filter: { term: { owned: true } } },
+          wish_list_count: { filter: { term: { on_wish_list: true } } },
+          read_count:      { filter: { term: { read: true } } },
+          unread_count:    { filter: { bool: { filter: [{ term: { owned: true } }, { term: { read: false } }] } } },
           gifted_to_count: {
             nested: { path: "gifted_to" },
             aggs: { has_gift: { value_count: { field: "gifted_to.person" } } }
           },
-          // Year histogram for timeline
-          by_decade: {
-            histogram: { field: "year", interval: 10, min_doc_count: 1 }
-          },
-          // Total estimated value
+          by_decade:   { histogram: { field: "year", interval: 10, min_doc_count: 1 } },
           total_value: { sum: { field: "est_value" } },
         },
         highlight: {
-          fields: { description: { number_of_fragments: 1, fragment_size: 150 }, title: {} },
+          fields: {
+            description: { number_of_fragments: 1, fragment_size: 150 },
+            title: {},
+          },
           pre_tags: ["<mark>"], post_tags: ["</mark>"],
         },
       },
     });
 
-    const hits = response.hits;
-    const aggs = response.aggregations;
+    const body = response.body;
+    const hits = body.hits;
+    const aggs = body.aggregations;
 
     res.json({
       total: hits.total.value,
@@ -113,7 +110,7 @@ app.get("/api/comics/search", async (req, res) => {
         owned:      aggs.owned_count.doc_count,
         wish_list:  aggs.wish_list_count.doc_count,
         read:       aggs.read_count.doc_count,
-        unread:     aggs.unread_count?.doc_count ?? 0,
+        unread:     aggs.unread_count.doc_count,
         gifted_to:  aggs.gifted_to_count?.has_gift?.value ?? 0,
         by_decade:  aggs.by_decade.buckets,
         total_value: aggs.total_value.value,
@@ -125,7 +122,7 @@ app.get("/api/comics/search", async (req, res) => {
   }
 });
 
-// ── Analytics (full collection stats, no pagination) ──────────────────────
+// ── Analytics ──────────────────────────────────────────────────────────────
 app.get("/api/analytics", async (req, res) => {
   try {
     const response = await es.search({
@@ -141,20 +138,20 @@ app.get("/api/analytics", async (req, res) => {
           owned_count:     { filter: { term: { owned: true } } },
           wish_list_count: { filter: { term: { on_wish_list: true } } },
           read_count:      { filter: { term: { read: true } } },
-          // Tag breakdown across owned items only
-          bluechip:       { filter: { bool: { filter: [{ term: { owned: true } }, { term: { tags: "Bluechip" } }] } } },
-          sleeper:        { filter: { bool: { filter: [{ term: { owned: true } }, { term: { tags: "Sleeper" } }] } } },
-          excellent_read: { filter: { bool: { filter: [{ term: { owned: true } }, { term: { tags: "Excellent Read" } }] } } },
-          tradable:       { filter: { bool: { filter: [{ term: { owned: true } }, { term: { tags: "Tradable" } }] } } },
-          // Gifted totals
+          bluechip:        { filter: { bool: { filter: [{ term: { owned: true } }, { term: { tags: "Bluechip" } }] } } },
+          sleeper:         { filter: { bool: { filter: [{ term: { owned: true } }, { term: { tags: "Sleeper" } }] } } },
+          excellent_read:  { filter: { bool: { filter: [{ term: { owned: true } }, { term: { tags: "Excellent Read" } }] } } },
+          tradable:        { filter: { bool: { filter: [{ term: { owned: true } }, { term: { tags: "Tradable" } }] } } },
           gifted_to_count: {
             nested: { path: "gifted_to" },
-            aggs: { total: { value_count: { field: "gifted_to.person" } }, by_person: { terms: { field: "gifted_to.person", size: 20 } }, by_occasion: { terms: { field: "gifted_to.occasion", size: 10 } } }
+            aggs: {
+              total:      { value_count: { field: "gifted_to.person" } },
+              by_person:  { terms: { field: "gifted_to.person", size: 20 } },
+              by_occasion:{ terms: { field: "gifted_to.occasion", size: 10 } },
+            }
           },
-          // Received gifts — top givers
-          gifted_by_person: { terms: { field: "gifted_by.person", size: 20 } },
-          gifted_by_occasion: { terms: { field: "gifted_by.occasion", size: 10 } },
-          // Publisher breakdown of owned bluechips
+          gifted_by_person:  { terms: { field: "gifted_by.person", size: 20 } },
+          gifted_by_occasion:{ terms: { field: "gifted_by.occasion", size: 10 } },
           bluechip_by_publisher: {
             filter: { bool: { filter: [{ term: { owned: true } }, { term: { tags: "Bluechip" } }] } },
             aggs: { publishers: { terms: { field: "publisher.keyword", size: 10 } } }
@@ -163,35 +160,35 @@ app.get("/api/analytics", async (req, res) => {
       },
     });
 
-    const a = response.aggregations;
+    const a = response.body.aggregations;
     res.json({
       summary: {
-        total_owned:    a.owned_count.doc_count,
+        total_owned:     a.owned_count.doc_count,
         total_wish_list: a.wish_list_count.doc_count,
-        total_read:     a.read_count.doc_count,
-        total_value:    a.total_value.value,
-        gifted_to:      a.gifted_to_count.total.value,
-        gifted_by:      a.gifted_by_person.buckets.reduce((s, b) => s + b.doc_count, 0),
+        total_read:      a.read_count.doc_count,
+        total_value:     a.total_value.value,
+        gifted_to:       a.gifted_to_count.total.value,
+        gifted_by:       a.gifted_by_person.buckets.reduce((s, b) => s + b.doc_count, 0),
       },
       tags: {
-        bluechip:     a.bluechip.doc_count,
-        sleeper:      a.sleeper.doc_count,
-        excellent_read: a.excellent_read.doc_count,
-        tradable:     a.tradable.doc_count,
+        bluechip:      a.bluechip.doc_count,
+        sleeper:       a.sleeper.doc_count,
+        excellent_read:a.excellent_read.doc_count,
+        tradable:      a.tradable.doc_count,
       },
-      publishers:      a.publishers.buckets,
-      genres:          a.genres.buckets,
-      by_decade:       a.by_decade.buckets,
-      all_tags:        a.tags.buckets,
+      publishers:  a.publishers.buckets,
+      genres:      a.genres.buckets,
+      by_decade:   a.by_decade.buckets,
+      all_tags:    a.tags.buckets,
       bluechip_by_publisher: a.bluechip_by_publisher.publishers.buckets,
       gifted_to: {
-        total:    a.gifted_to_count.total.value,
-        by_person: a.gifted_to_count.by_person.buckets,
-        by_occasion: a.gifted_to_count.by_occasion.buckets,
+        total:      a.gifted_to_count.total.value,
+        by_person:  a.gifted_to_count.by_person.buckets,
+        by_occasion:a.gifted_to_count.by_occasion.buckets,
       },
       gifted_by: {
-        by_person:   a.gifted_by_person.buckets,
-        by_occasion: a.gifted_by_occasion.buckets,
+        by_person:  a.gifted_by_person.buckets,
+        by_occasion:a.gifted_by_occasion.buckets,
       },
     });
   } catch (err) {
@@ -200,10 +197,9 @@ app.get("/api/analytics", async (req, res) => {
   }
 });
 
-// ── Gifting endpoints ──────────────────────────────────────────────────────
+// ── Gifts ──────────────────────────────────────────────────────────────────
 app.get("/api/gifts", async (req, res) => {
   try {
-    // All comics with gifting data
     const [givenRes, receivedRes] = await Promise.all([
       es.search({
         index: INDEX,
@@ -224,8 +220,8 @@ app.get("/api/gifts", async (req, res) => {
     ]);
 
     res.json({
-      given:    givenRes.hits.hits.map(h => ({ id: h._id, ...h._source })),
-      received: receivedRes.hits.hits.map(h => ({ id: h._id, ...h._source })),
+      given:    givenRes.body.hits.hits.map(h => ({ id: h._id, ...h._source })),
+      received: receivedRes.body.hits.hits.map(h => ({ id: h._id, ...h._source })),
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -236,7 +232,7 @@ app.get("/api/gifts", async (req, res) => {
 app.get("/api/comics/:id", async (req, res) => {
   try {
     const doc = await es.get({ index: INDEX, id: req.params.id });
-    res.json({ id: doc._id, ...doc._source });
+    res.json({ id: doc.body._id, ...doc.body._source });
   } catch (err) {
     if (err.meta?.statusCode === 404) return res.status(404).json({ error: "Not found" });
     res.status(500).json({ error: err.message });
@@ -247,9 +243,9 @@ app.get("/api/comics/:id", async (req, res) => {
 app.post("/api/comics", async (req, res) => {
   try {
     const comic = { ...req.body, createdAt: new Date().toISOString(), gifted_to: req.body.gifted_to || [], gifted_by: req.body.gifted_by || null };
-    const response = await es.index({ index: INDEX, document: comic });
+    const response = await es.index({ index: INDEX, body: comic });
     await es.indices.refresh({ index: INDEX });
-    res.status(201).json({ id: response._id, ...comic });
+    res.status(201).json({ id: response.body._id, ...comic });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -258,34 +254,32 @@ app.post("/api/comics", async (req, res) => {
 // ── Update comic ───────────────────────────────────────────────────────────
 app.put("/api/comics/:id", async (req, res) => {
   try {
-    await es.update({ index: INDEX, id: req.params.id, doc: req.body });
+    await es.update({ index: INDEX, id: req.params.id, body: { doc: req.body } });
     await es.indices.refresh({ index: INDEX });
     const updated = await es.get({ index: INDEX, id: req.params.id });
-    res.json({ id: updated._id, ...updated._source });
+    res.json({ id: updated.body._id, ...updated.body._source });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// ── Add a gift record to a comic ──────────────────────────────────────────
-// PATCH /api/comics/:id/gift
-// body: { direction: "to"|"by", person, date, occasion, notes }
+// ── Add gift ───────────────────────────────────────────────────────────────
 app.patch("/api/comics/:id/gift", async (req, res) => {
   try {
     const { direction, person, date, occasion, notes } = req.body;
     const doc = await es.get({ index: INDEX, id: req.params.id });
-    const comic = doc._source;
+    const comic = doc.body._source;
 
     if (direction === "to") {
       const gifted_to = [...(comic.gifted_to || []), { person, date, occasion, notes }];
-      await es.update({ index: INDEX, id: req.params.id, doc: { gifted_to } });
+      await es.update({ index: INDEX, id: req.params.id, body: { doc: { gifted_to } } });
     } else if (direction === "by") {
-      await es.update({ index: INDEX, id: req.params.id, doc: { gifted_by: { person, date, occasion, notes } } });
+      await es.update({ index: INDEX, id: req.params.id, body: { doc: { gifted_by: { person, date, occasion, notes } } } });
     }
 
     await es.indices.refresh({ index: INDEX });
     const updated = await es.get({ index: INDEX, id: req.params.id });
-    res.json({ id: updated._id, ...updated._source });
+    res.json({ id: updated.body._id, ...updated.body._source });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -307,7 +301,7 @@ app.get("/api/comics/:id/similar", async (req, res) => {
         size: 4,
       },
     });
-    res.json(response.hits.hits.map(h => ({ id: h._id, ...h._source })));
+    res.json(response.body.hits.hits.map(h => ({ id: h._id, ...h._source })));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -324,7 +318,7 @@ app.get("/api/suggest/:prefix", async (req, res) => {
         size: 6,
       },
     });
-    res.json(response.hits.hits.map(h => ({ id: h._id, ...h._source })));
+    res.json(response.body.hits.hits.map(h => ({ id: h._id, ...h._source })));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
