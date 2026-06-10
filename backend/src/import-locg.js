@@ -17,7 +17,7 @@
  * Run with: npm run import-locg
  */
 
-import { Client } from "@elastic/elasticsearch";
+import { Client } from "@opensearch-project/opensearch";
 import { createReadStream } from "fs";
 import { createInterface } from "readline";
 import dotenv from "dotenv";
@@ -37,21 +37,19 @@ const INDEX = "comics";
 //
 // Map each header to our ES field name
 const HEADER_MAP = {
-  "Series Name":    "series",
-  "Issue Number":   "issue",
-  "Issue Title":    "title",
-  "Publisher":      "publisher",
-  "Release Date":   "release_date",   // we'll extract year from this
-  "Cover Price":    "cover_price",
-  "My Rating":      "rating",
-  "Read":           "read",
-  "Owned":          "owned",
-  "Wishlist":       "on_wish_list",
-  "Reading List":   "on_reading_list",
-  "Tags":           "tags",
-  "Notes":          "notes",
-  "Cover URL":      "coverImage",
-  "Series ID":      "locg_id",        // if present in the export
+  "Publisher Name":  "publisher",
+  "Series Name":     "series",
+  "Full Title":      "title",
+  "Release Date":    "release_date",
+  "In Collection":   "owned",
+  "In Wish List":    "on_wish_list",
+  "Marked Read":     "read",
+  "My Rating":       "rating",
+  "Price Paid":      "cover_price",
+  "Date Purchased":  "added_date",
+  "Condition":       "condition",
+  "Notes":           "notes",
+  "Tags":            "tags",
 };
 
 function parseCSVLine(line) {
@@ -152,15 +150,15 @@ async function importCSV(csvPath) {
   let from = 0;
   while (true) {
     const res = await es.search({ index: INDEX, body: { query: { match_all: {} }, size: 100, from } });
-    const hits = res.hits.hits;
+    const hits = res.body.hits.hits;
     if (hits.length === 0) break;
-    hits.forEach(h => {
+      hits.forEach(h => {
       if (h._source.locg_id) existingByLocgId[h._source.locg_id] = { id: h._id, ...h._source };
-      const key = `${h._source.series}|${h._source.issue}`;
-      existingByTitle[key] = { id: h._id, ...h._source };
-    });
-    from += hits.length;
-    if (from >= res.hits.total.value) break;
+        const key = `${h._source.series}|${h._source.issue}`;
+        existingByTitle[key] = { id: h._id, ...h._source };
+      });
+      from += hits.length;
+      if (from >= res.body.hits.total.value) break;
   }
   console.log(`🔍 Found ${Object.keys(existingByLocgId).length} existing docs with LoCG IDs.`);
 
@@ -178,14 +176,14 @@ async function importCSV(csvPath) {
           merged[f] = existing[f];
         }
       });
-      await es.update({ index: INDEX, id: existing.id, doc: merged });
+      await es.update({ index: INDEX, id: existing.id, body: { doc: merged } });
       updated++;
     } else {
       // New comic — insert fresh with empty gift arrays
-      await es.index({
-        index: INDEX,
-        document: { ...doc, gifted_to: [], gifted_by: null, createdAt: new Date().toISOString() }
-      });
+	await es.index({
+      index: INDEX,
+      body: { ...doc, gifted_to: [], gifted_by: null, createdAt: new Date().toISOString() }
+    });
       created++;
     }
   }
@@ -197,7 +195,7 @@ async function importCSV(csvPath) {
   console.log(`   Skipped: ${skipped}`);
 
   const count = await es.count({ index: INDEX });
-  console.log(`\n📦 Index now has ${count.count} documents.`);
+  console.log(`\n📦 Index now has ${count.body.count} documents.`);
 }
 
 // ── Run ───────────────────────────────────────────────────────────────────────

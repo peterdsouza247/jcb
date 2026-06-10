@@ -4,13 +4,13 @@
  * Run with: node src/gap-analysis.js
  *
  * Finds:
- *   1. Series where you own some issues but not all (partial runs)
- *   2. Wish list items that share publishers/writers with your Bluechips
+ *   1. Wish list items that share publishers/writers with your Bluechips
  *      (priority acquisition targets)
- *   3. Tradable items that might be good swap candidates
+ *   2. Tradable items that might be good swap candidates
+ *   3. Unread Sleepers (hidden gems)
  */
 
-import { Client } from "@elastic/elasticsearch";
+import { Client } from "@opensearch-project/opensearch";
 import dotenv from "dotenv";
 dotenv.config();
 
@@ -46,10 +46,10 @@ async function gapAnalysis() {
     }),
   ]);
 
-  const ownedPublishers = new Set(bluechips.hits.hits.map(h => h._source.publisher));
-  const ownedWriters    = new Set(bluechips.hits.hits.map(h => h._source.writer).filter(Boolean));
+  const ownedPublishers = new Set(bluechips.body.hits.hits.map(h => h._source.publisher));
+  const ownedWriters    = new Set(bluechips.body.hits.hits.map(h => h._source.writer).filter(Boolean));
 
-  const priorityWishList = wishList.hits.hits.filter(h => {
+  const priorityWishList = wishList.body.hits.hits.filter(h => {
     const s = h._source;
     return ownedPublishers.has(s.publisher) || (s.writer && ownedWriters.has(s.writer));
   });
@@ -83,10 +83,10 @@ async function gapAnalysis() {
 
   console.log("♻️  TRADABLE ITEMS (potential swap or sell candidates)");
   console.log("─────────────────────────────────────────────────────");
-  if (tradable.hits.hits.length === 0) {
+  if (tradable.body.hits.hits.length === 0) {
     console.log("  None tagged as Tradable.\n");
   } else {
-    tradable.hits.hits.forEach(h => {
+    tradable.body.hits.hits.forEach(h => {
       const s = h._source;
       const extraTags = (s.tags || []).filter(t => t !== "Tradable").join(", ");
       console.log(`  • ${s.series} (${s.year}) — ${s.publisher}${extraTags ? ` [${extraTags}]` : ""}${s.condition ? ` — ${s.condition}` : ""}`);
@@ -107,11 +107,15 @@ async function gapAnalysis() {
 
   console.log("👁  UNREAD SLEEPERS (your hidden gems waiting to be discovered)");
   console.log("────────────────────────────────────────────────────────────────");
-  sleepersUnread.hits.hits.forEach(h => {
-    const s = h._source;
-    console.log(`  • ${s.series} (${s.year})${s.writer ? ` — ${s.writer}` : ""}`);
-  });
-  console.log();
+  if (sleepersUnread.body.hits.hits.length === 0) {
+    console.log("  None found.\n");
+  } else {
+    sleepersUnread.body.hits.hits.forEach(h => {
+      const s = h._source;
+      console.log(`  • ${s.series} (${s.year})${s.writer ? ` — ${s.writer}` : ""}`);
+    });
+    console.log();
+  }
 
   // ── 4. Summary ─────────────────────────────────────────────────────────────
   const [totalOwned, totalRead, totalWish] = await Promise.all([
@@ -120,16 +124,16 @@ async function gapAnalysis() {
     es.count({ index: INDEX, body: { query: { bool: { filter: [{ term: { on_wish_list: true } }, { term: { owned: false } }] } } } }),
   ]);
 
-  const readRate = Math.round((totalRead.count / totalOwned.count) * 100);
+  const readRate = Math.round((totalRead.body.count / totalOwned.body.count) * 100);
 
   console.log("📊 SUMMARY");
   console.log("──────────");
-  console.log(`  Owned:     ${totalOwned.count}`);
-  console.log(`  Read:      ${totalRead.count} (${readRate}% read rate)`);
-  console.log(`  Wish List: ${totalWish.count}`);
+  console.log(`  Owned:     ${totalOwned.body.count}`);
+  console.log(`  Read:      ${totalRead.body.count} (${readRate}% read rate)`);
+  console.log(`  Wish List: ${totalWish.body.count}`);
   console.log(`  Priority acquisitions: ${priorityWishList.length}`);
-  console.log(`  Tradable:  ${tradable.hits.hits.length}`);
-  console.log(`  Unread sleepers: ${sleepersUnread.hits.hits.length}`);
+  console.log(`  Tradable:  ${tradable.body.hits.hits.length}`);
+  console.log(`  Unread sleepers: ${sleepersUnread.body.hits.hits.length}`);
 }
 
 gapAnalysis().catch(console.error);

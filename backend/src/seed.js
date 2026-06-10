@@ -7,7 +7,7 @@
  * - locg_id stores the League of Comic Geeks series ID for deep-linking
  */
 
-import { Client } from "@elastic/elasticsearch";
+import { Client } from "@opensearch-project/opensearch";
 import dotenv from "dotenv";
 dotenv.config();
 
@@ -478,17 +478,17 @@ async function setup() {
   console.log("🔌 Connecting to Elasticsearch...");
   try {
     const info = await es.info();
-    console.log(`✅ Connected! ES version: ${info.version.number}`);
+    console.log(`✅ Connected! ES version: ${info.body?.version?.number || info.version?.number || 'unknown'}`);
   } catch (err) {
     console.error("❌ Cannot connect:", err.message);
     process.exit(1);
   }
 
-  const exists = await es.indices.exists({ index: INDEX });
-  if (exists) {
-    console.log(`🗑️  Deleting existing '${INDEX}' index...`);
-    await es.indices.delete({ index: INDEX });
-  }
+    const exists = await es.indices.exists({ index: INDEX });
+    if (exists.body) {
+        console.log(`🗑️  Deleting existing '${INDEX}' index...`);
+        await es.indices.delete({ index: INDEX });
+    }
 
   console.log(`📦 Creating '${INDEX}' index with mapping...`);
   await es.indices.create({ index: INDEX, body: mapping });
@@ -502,18 +502,18 @@ async function setup() {
 
   console.log(`📚 Indexing ${allDocs.length} documents (${collection.length} owned + ${wishList.length} wish list)...`);
 
-  const operations = allDocs.flatMap(doc => [{ index: { _index: INDEX } }, doc]);
-  const result = await es.bulk({ refresh: true, operations });
-
-  if (result.errors) {
-    const errors = result.items.filter(i => i.index?.error);
-    console.error("❌ Errors:", errors.slice(0, 3));
-  } else {
-    console.log(`✅ Indexed ${allDocs.length} documents.`);
-  }
+  //const operations = allDocs.flatMap(doc => [{ index: { _index: INDEX } }, doc]);
+  //const result = await es.bulk({ refresh: true, body: operations });
+  
+  //if (result.errors) {
+  //  const errors = result.items.filter(i => i.index?.error);
+  //  console.error("❌ Errors:", errors.slice(0, 3));
+  //} else {
+  //  console.log(`✅ Indexed ${allDocs.length} documents.`);
+  //}
 
   const count = await es.count({ index: INDEX });
-  console.log(`\n🎉 Index ready with ${count.count} documents.`);
+  console.log(`\n🎉 Index ready with ${count.body.count} documents.`);
 }
 
 setup().catch(console.error);
