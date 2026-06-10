@@ -78,7 +78,7 @@ app.get("/api/comics/search", async (req, res) => {
           owned_count:      { filter: { term: { owned: true } } },
           wish_list_count:  { filter: { term: { on_wish_list: true } } },
           read_count:       { filter: { term: { read: true } } },
-          unread_count:     { bool: { filter: [{ term: { owned: true } }, { term: { read: false } }] } },
+          unread_count: { filter: { bool: { filter: [{ term: { owned: true } }, { term: { read: false } }] } } },
           // Gifted aggs using nested query
           gifted_to_count: {
             nested: { path: "gifted_to" },
