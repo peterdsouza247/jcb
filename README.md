@@ -1,160 +1,260 @@
-# The Long Box
+# Jacob's Comic Books
 
-A personal comic catalogue built around [GreyWarden247's collection on League of Comic Geeks](https://leagueofcomicgeeks.com/profile/GreyWarden247/collection). Powered by Elasticsearch.
+A personal comic catalogue built around [GreyWarden247's collection on League of Comic Geeks](https://leagueofcomicgeeks.com/profile/GreyWarden247/collection).
+Powered by OpenSearch (Bonsai), Node.js/Express, and React/Vite.
 
-**Stack:** React + Vite (frontend, GitHub Pages) · Node.js + Express (backend, Railway/Render) · Elasticsearch (Elastic Cloud or Bonsai)
-
----
-
-## Features
-
-| Feature | Description |
-|---|---|
-| **Collection browser** | Full-text search, tag/publisher/genre filters, sort by year/title/value |
-| **Your tags** | Bluechip, Sleeper, Excellent Read, Tradable — first-class filters and analytics |
-| **Gift tracker** | Record comics you've given (to who, occasion, date) and received (from who) |
-| **Analytics dashboard** | Publisher breakdown, decade timeline, tag counts, read rate, gift totals |
-| **LoCG deep links** | Every comic links back to its LoCG series page |
-| **Autocomplete** | Typeahead search powered by ES phrase-prefix queries |
-| **Similar comics** | ES "More Like This" on genre/writer/tags |
-| **CSV import** | One-command import from LoCG's export — preserves your custom data |
-| **Gap analysis** | CLI report: priority wish list, unread sleepers, tradables |
+**Live frontend:** https://peterdsouza247.github.io/jcb/
+**Backend API:** https://jcb-kjal.onrender.com
 
 ---
 
-## Quick Start
+## Architecture
 
-### 1. Get Elasticsearch (free)
+```
+React + Vite          Node.js + Express       Bonsai (OpenSearch)
+(GitHub Pages)   →    (Render)            →   (Free tier)
+```
 
-**Bonsai** (easiest, no expiry, no credit card):
-1. Sign up at [bonsai.io](https://bonsai.io)
-2. Create a cluster — free tier is 125MB / 10k docs
-3. Copy your cluster URL: `https://user:pass@yourcluster.bonsai.io`
+The frontend is static and deployed automatically via GitHub Actions on every push to main.
+The backend runs on Render's free tier (spins down after 15 min inactivity — first request takes ~30s to wake it).
+All scripts run locally on your machine against the Bonsai cloud index.
 
-**Elastic Cloud** (more features, 14-day trial):
-1. Sign up at [cloud.elastic.co](https://cloud.elastic.co)
-2. Create a deployment, note your Cloud ID + password
+---
 
-### 2. Backend
+## One-time local setup
+
+### Prerequisites
+- Node.js installed (https://nodejs.org — download the LTS version)
+- A terminal (PowerShell on Windows, Terminal on Mac)
+
+### Install dependencies
+
+```bash
+# From the project root
+cd backend
+npm install
+
+cd ../frontend
+npm install
+```
+
+### Set up your .env file
 
 ```bash
 cd backend
 cp .env.example .env
-# Paste your Elasticsearch credentials into .env
-
-npm install
-npm run seed        # Creates index + loads your 58-issue collection
-npm run dev         # API on http://localhost:3001
 ```
 
-Verify:
-```bash
-curl http://localhost:3001/health
-curl "http://localhost:3001/api/analytics"
+Open `backend/.env` in any text editor and fill in your Bonsai credentials:
+
+```
+ELASTICSEARCH_URL=https://youruser:yourpassword@yourcluster.bonsai.io
+PORT=3001
 ```
 
-### 3. Frontend
-
-```bash
-cd frontend
-cp .env.example .env
-# VITE_API_URL=http://localhost:3001 is the default — fine for local dev
-
-npm install
-npm run dev         # Opens http://localhost:5173
-```
+Get your Bonsai URL from: bonsai.io → your cluster → Access → Credentials
 
 ---
 
-## Importing from League of Comic Geeks
+## Running scripts locally
 
-When you want to sync your real LoCG collection:
+All scripts run from the `backend/` folder. Open a terminal, `cd backend`, then run in this order:
 
-1. Go to your [LoCG collection stats page](https://leagueofcomicgeeks.com/profile/GreyWarden247/collection)
-2. Scroll to **Export Collection** and download the CSV
-3. Save it as `backend/locg-export.csv`
-4. Run:
+---
+
+### Step 1 — Seed the index (first time only)
+
+Creates the OpenSearch index with the correct field mapping.
 
 ```bash
-cd backend
+npm run seed
+```
+
+Run this once when setting up fresh, or if you want to wipe and restart.
+After seeding, the index will be empty — run the import next.
+
+---
+
+### Step 2 — Import your LoCG collection
+
+Export your collection from League of Comic Geeks first:
+1. Go to https://leagueofcomicgeeks.com/profile/greywarden247/stats/collection
+2. Scroll to the bottom and click **Export Collection**
+3. Save the CSV as `backend/locg-export.csv`
+
+Then run:
+
+```bash
 npm run import-locg
-# or with a custom path:
-node src/import-locg.js /path/to/your-export.csv
 ```
 
-The import is **non-destructive** — it preserves your custom data (gift history, condition, storage location, personal notes, ratings) and only updates the LoCG-sourced fields.
+This is non-destructive — it preserves any gift history, notes, or custom data
+already in the index. Safe to re-run whenever you want to sync new additions from LoCG.
 
 ---
 
-## Gap Analysis
+### Step 3 — Import gift lists
 
-Run this CLI report any time to see:
+For each LoCG community list (e.g. "Gifted to Luca"), export it as CSV and run:
+
+```bash
+# Comics you gifted TO someone
+node src/import-locg-list.js luca-list.csv "Luca" to
+node src/import-locg-list.js luca-list.csv "Luca" to "Birthday" "2024-12-25"
+
+# Comics gifted BY someone to you
+node src/import-locg-list.js sarah-list.csv "Sarah" by
+node src/import-locg-list.js sarah-list.csv "Sarah" by "Christmas" "2025-12-25"
+```
+
+The direction (`to` / `by`) controls whether it populates gifted_to or gifted_by.
+Never duplicates — safe to re-run. Each person automatically appears as a filter in the sidebar.
+
+---
+
+### Step 4 — Fetch cover art (optional but recommended)
+
+Gets cover images for every comic from the Comic Vine API (free).
+
+Get your free API key first:
+1. Go to https://comicvine.gamespot.com/api/
+2. Create a free account and verify your email
+3. Your API key appears on that page immediately
+4. Add it to your `backend/.env`:
+
+```
+COMIC_VINE_API_KEY=your_key_here
+```
+
+Then run:
+
+```bash
+npm run fetch-covers
+```
+
+Takes about 30 minutes for a full collection (rate limited to 1 request per 20 seconds
+to stay within Comic Vine's free tier of 200 requests/hour).
+Safe to re-run — skips any comic that already has a cover image.
+
+---
+
+### Step 5 — Analyze your collection
+
+Scores every owned comic on trade vs keep potential using a rule-based engine.
+No API key required. Results appear in the Analysis tab in the app.
+
+```bash
+npm run analyze
+```
+
+To preview the report without saving:
+
+```bash
+node src/analyze-collection.js --report
+```
+
+To re-analyze everything (e.g. after adding new comics or changing tags):
+
+```bash
+node src/analyze-collection.js --force
+```
+
+---
+
+### Step 6 — Gap analysis (optional CLI report)
+
+Prints a report in your terminal showing:
 - Priority wish list items (overlap with your Bluechip publishers/writers)
-- Unread Sleepers (your hidden gems)
+- Unread Sleepers (hidden gems waiting to be discovered)
 - Tradable items
 
 ```bash
-cd backend
 npm run gap-analysis
 ```
 
 ---
 
-## Deploying to GitHub
+## Ongoing workflow
 
-### Frontend → GitHub Pages
+When you add new comics to LoCG:
+```bash
+cd backend
+npm run import-locg           # sync new comics
+npm run fetch-covers          # fetch covers for new ones
+node src/analyze-collection.js  # analyze new ones only (no --force needed)
+```
 
-1. Push the repo to GitHub
-2. **Settings → Pages → Source: GitHub Actions**
-3. Add two Repository Variables (**Settings → Secrets and variables → Actions → Variables**):
+When you create a new gift list on LoCG:
+```bash
+node src/import-locg-list.js their-list.csv "PersonName" to
+```
 
-| Variable | Example |
-|---|---|
-| `VITE_API_URL` | `https://comic-api.railway.app` |
-| `VITE_BASE_PATH` | `/comic-catalogue` |
-
-The workflow in `.github/workflows/deploy.yml` deploys automatically on every push to `main`.
-
-### Backend → Railway (easiest)
-
-1. [railway.app](https://railway.app) → New Project → Deploy from GitHub
-2. Set root directory to `backend`
-3. Add environment variables (copy from your `.env`)
-4. Railway gives you a public URL — paste it into `VITE_API_URL` above
-
-### Backend → Render (free tier)
-
-1. [render.com](https://render.com) → New Web Service → connect repo
-2. Root directory: `backend`, Build: `npm install`, Start: `npm start`
-3. Add environment variables
+When you update tags in LoCG and want fresh recommendations:
+```bash
+npm run import-locg
+node src/analyze-collection.js --force
+```
 
 ---
 
-## Project Structure
+## Running the app locally
+
+```bash
+# Terminal 1 — backend
+cd backend
+npm run dev
+
+# Terminal 2 — frontend
+cd frontend
+npm run dev
+# Opens http://localhost:5173
+```
+
+---
+
+## Deploying changes
+
+Frontend — just push to GitHub. The Actions workflow builds and deploys automatically:
+```bash
+git add .
+git commit -m "your message"
+git push
+```
+
+Backend — Render auto-deploys when you push to GitHub (if connected).
+Environment variables (ELASTICSEARCH_URL etc.) are set in Render's dashboard under Environment.
+
+---
+
+## Project structure
 
 ```
 comic-catalogue/
-├── .github/workflows/deploy.yml     ← GitHub Actions CI/CD
+├── .github/workflows/deploy.yml        GitHub Actions — deploys frontend to GitHub Pages
 ├── backend/
 │   ├── src/
-│   │   ├── server.js                ← Express API + all ES queries
-│   │   ├── seed.js                  ← Index mapping + your real collection
-│   │   ├── import-locg.js           ← LoCG CSV import (non-destructive)
-│   │   └── gap-analysis.js          ← CLI gap/priority report
+│   │   ├── server.js                   Express API — all endpoints
+│   │   ├── seed.js                     Creates OpenSearch index + mapping
+│   │   ├── import-locg.js              Imports main LoCG collection CSV
+│   │   ├── import-locg-list.js         Imports LoCG gift lists (to/by direction)
+│   │   ├── fetch-covers.js             Fetches cover art from Comic Vine API
+│   │   ├── analyze-collection.js       Rule-based trade/keep analysis
+│   │   └── gap-analysis.js             CLI gap report (wish list, sleepers, tradables)
 │   ├── .env.example
 │   └── package.json
 ├── frontend/
 │   ├── src/
-│   │   ├── App.jsx                  ← Three-page app shell + nav
+│   │   ├── App.jsx                     App shell — nav + page routing
 │   │   ├── pages/
-│   │   │   ├── CollectionPage.jsx   ← Search, filter, browse
-│   │   │   ├── AnalyticsPage.jsx    ← Charts and stats
-│   │   │   └── GiftsPage.jsx        ← Gift history tracker
+│   │   │   ├── CollectionPage.jsx      Browse + search + filter
+│   │   │   ├── AnalyticsPage.jsx       Charts and collection stats
+│   │   │   ├── AnalysisPage.jsx        AI trade/keep recommendations
+│   │   │   └── GiftsPage.jsx           Gift history tracker
 │   │   ├── components/
-│   │   │   ├── ComicCard.jsx        ← Grid card with tag ribbons
-│   │   │   └── ComicModal.jsx       ← Detail view + gift form
-│   │   ├── hooks/useApi.js          ← All API calls
-│   │   └── styles.css               ← Pulp/inkprint design system
+│   │   │   ├── ComicCard.jsx           Grid card
+│   │   │   └── ComicModal.jsx          Detail modal + gift form
+│   │   ├── hooks/useApi.js             All API calls
+│   │   └── styles.css                  Design system
 │   ├── .env.example
 │   └── vite.config.js
 └── README.md
@@ -162,41 +262,23 @@ comic-catalogue/
 
 ---
 
-## Adding Custom Data
+## Environment variables
 
-### Add a gift record
-
-Open any comic in the UI → scroll to **Gift History** → **Record a Gift**.
-
-Or via API:
-```bash
-# You gave Injection to someone for their birthday
-curl -X PATCH http://localhost:3001/api/comics/{id}/gift \
-  -H "Content-Type: application/json" \
-  -d '{"direction":"to","person":"Reuben","date":"2024-12-25","occasion":"Christmas","notes":"He loves Warren Ellis"}'
-
-# Someone gave you Once & Future
-curl -X PATCH http://localhost:3001/api/comics/{id}/gift \
-  -H "Content-Type: application/json" \
-  -d '{"direction":"by","person":"Sarah","date":"2023-08-15","occasion":"Birthday"}'
+### backend/.env
+```
+ELASTICSEARCH_URL=https://user:password@yourcluster.bonsai.io
+PORT=3001
+COMIC_VINE_API_KEY=your_key_here        # optional — needed for fetch-covers
 ```
 
-### Add a new comic manually
+### Render environment variables (set in Render dashboard)
+```
+ELASTICSEARCH_URL=https://user:password@yourcluster.bonsai.io
+PORT=3001
+```
 
-```bash
-curl -X POST http://localhost:3001/api/comics \
-  -H "Content-Type: application/json" \
-  -d '{
-    "title": "Planetary #1",
-    "series": "Planetary",
-    "issue": 1,
-    "year": 1999,
-    "publisher": "DC Comics / Wildstorm",
-    "genre": "Science Fiction",
-    "writer": "Warren Ellis",
-    "artist": "John Cassaday",
-    "owned": true,
-    "read": false,
-    "tags": ["Bluechip", "Sleeper"]
-  }'
+### GitHub Actions variables (Settings → Secrets and variables → Actions → Variables)
+```
+VITE_API_URL=https://jcb-kjal.onrender.com
+VITE_BASE_PATH=/jcb
 ```
