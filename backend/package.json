@@ -1,7 +1,7 @@
 {
   "name": "comic-catalogue-backend",
   "version": "2.0.0",
-  "description": "Elasticsearch-powered comic catalogue API for GreyWarden247",
+  "description": "Jacob's Comic Books — OpenSearch-powered API",
   "main": "src/server.js",
   "type": "module",
   "scripts": {
@@ -9,10 +9,13 @@
     "dev": "node --watch src/server.js",
     "seed": "node src/seed.js",
     "import-locg": "node src/import-locg.js",
+    "import-list": "node src/import-locg-list.js",
+    "fetch-covers": "node src/fetch-covers.js",
+    "analyze": "node src/analyze-collection.js",
     "gap-analysis": "node src/gap-analysis.js"
   },
   "dependencies": {
-    "@opensearch-project/opensearch": "^3.6.0",
+    "@opensearch-project/opensearch": "^2.6.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2"
