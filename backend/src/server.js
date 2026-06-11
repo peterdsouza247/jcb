@@ -2,11 +2,15 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import { Client } from "@opensearch-project/opensearch";
+import adminRouter from "./admin-routes.js";
 
 dotenv.config();
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// ── Admin routes ───────────────────────────────────────────────────────────
+app.use("/api/admin", adminRouter);
 
 const esConfig = process.env.ELASTIC_CLOUD_ID
   ? { cloud: { id: process.env.ELASTIC_CLOUD_ID }, auth: { username: process.env.ELASTIC_USERNAME || "elastic", password: process.env.ELASTIC_PASSWORD } }
