@@ -539,15 +539,14 @@ router.post("/fetch-covers", requireAuth, async (req, res) => {
 // ── GET /api/admin/gap-analysis ───────────────────────────────────────────────
 router.get("/gap-analysis", requireAuth, async (req, res) => {
   try {
-    const [bluechips, wishList, tradable, sleepersUnread, totalOwned, totalRead, totalWish] = await Promise.all([
-      es.search({ index: INDEX, body: { query: { bool: { filter: [{ term: { owned: true } }, { term: { tags: "Bluechip" } }] } }, _source: ["series","publisher","writer"], size: 100 } }),
-      es.search({ index: INDEX, body: { query: { bool: { filter: [{ term: { on_wish_list: true } }, { term: { owned: false } }] } }, _source: ["series","publisher","writer","locg_url"], size: 100 } }),
-      es.search({ index: INDEX, body: { query: { bool: { filter: [{ term: { owned: true } }, { term: { tags: "Tradable" } }] } }, _source: ["series","publisher","year","condition","tags"], size: 50 } }),
-      es.search({ index: INDEX, body: { query: { bool: { filter: [{ term: { owned: true } }, { term: { tags: "Sleeper" } }, { term: { read: false } }] } }, _source: ["series","publisher","year","writer"], sort: [{ year: "asc" }], size: 50 } }),
-      es.count({ index: INDEX, body: { query: { term: { owned: true } } } }),
-      es.count({ index: INDEX, body: { query: { bool: { filter: [{ term: { owned: true } }, { term: { read: true } }] } } } }),
-      es.count({ index: INDEX, body: { query: { bool: { filter: [{ term: { on_wish_list: true } }, { term: { owned: false } }] } } } }),
-    ]);
+    // Run sequentially to avoid Bonsai free tier concurrent request limit
+    const bluechips      = await es.search({ index: INDEX, body: { query: { bool: { filter: [{ term: { owned: true } }, { term: { tags: "Bluechip" } }] } }, _source: ["series","publisher","writer"], size: 100 } });
+    const wishList       = await es.search({ index: INDEX, body: { query: { bool: { filter: [{ term: { on_wish_list: true } }, { term: { owned: false } }] } }, _source: ["series","publisher","writer","locg_url"], size: 100 } });
+    const tradable       = await es.search({ index: INDEX, body: { query: { bool: { filter: [{ term: { owned: true } }, { term: { tags: "Tradable" } }] } }, _source: ["series","publisher","year","condition","tags"], size: 50 } });
+    const sleepersUnread = await es.search({ index: INDEX, body: { query: { bool: { filter: [{ term: { owned: true } }, { term: { tags: "Sleeper" } }, { term: { read: false } }] } }, _source: ["series","publisher","year","writer"], sort: [{ year: "asc" }], size: 50 } });
+    const totalOwned     = await es.count({ index: INDEX, body: { query: { term: { owned: true } } } });
+    const totalRead      = await es.count({ index: INDEX, body: { query: { bool: { filter: [{ term: { owned: true } }, { term: { read: true } }] } } } });
+    const totalWish      = await es.count({ index: INDEX, body: { query: { bool: { filter: [{ term: { on_wish_list: true } }, { term: { owned: false } }] } } } });
 
     const ownedPublishers = new Set(bluechips.body.hits.hits.map(h => h._source.publisher));
     const ownedWriters    = new Set(bluechips.body.hits.hits.map(h => h._source.writer).filter(Boolean));
@@ -577,12 +576,10 @@ router.get("/gap-analysis", requireAuth, async (req, res) => {
 // ── GET /api/admin/status ─────────────────────────────────────────────────────
 router.get("/status", requireAuth, async (req, res) => {
   try {
-    const [total, owned, withCovers, analyzed] = await Promise.all([
-      es.count({ index: INDEX }),
-      es.count({ index: INDEX, body: { query: { term: { owned: true } } } }),
-      es.count({ index: INDEX, body: { query: { bool: { must_not: [{ term: { coverImage: "" } }], filter: [{ exists: { field: "coverImage" } }] } } } }),
-      es.count({ index: INDEX, body: { query: { bool: { filter: [{ exists: { field: "recommendation" } }] } } } }),
-    ]);
+    const total      = await es.count({ index: INDEX });
+    const owned      = await es.count({ index: INDEX, body: { query: { term: { owned: true } } } });
+    const withCovers = await es.count({ index: INDEX, body: { query: { bool: { must_not: [{ term: { coverImage: "" } }], filter: [{ exists: { field: "coverImage" } }] } } } });
+    const analyzed   = await es.count({ index: INDEX, body: { query: { bool: { filter: [{ exists: { field: "recommendation" } }] } } } });
     res.json({
       total_docs:    total.body.count,
       owned:         owned.body.count,
