@@ -435,12 +435,12 @@ router.post("/analyze", requireAuth, async (req, res) => {
       ? { term: { owned: true } }
       : { bool: { filter: [{ term: { owned: true } }], must_not: [{ exists: { field: "recommendation" } }] } };
 
-    const res = await es.search({
+    const esRes = await es.search({
       index: INDEX,
       body: { query, _source: ["title","series","publisher","year","tags","read","gifted_to","gifted_by","condition"], size: 500 }
     });
 
-    const comics = res.body.hits.hits.map(h => ({ id: h._id, ...h._source }));
+    const comics = esRes.body.hits.hits.map(h => ({ id: h._id, ...h._source }));
 
     if (comics.length === 0) {
       return res.json({ success: true, message: force ? "No owned comics found." : "All comics already analyzed.", analyzed: 0 });
