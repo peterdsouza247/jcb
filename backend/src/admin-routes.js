@@ -11,9 +11,6 @@
 import express from "express";
 import multer  from "multer";
 import { Client } from "@opensearch-project/opensearch";
-import dotenv from "dotenv";
-dotenv.config();
-
 const router = express.Router();
 
 // ── OpenSearch client ────────────────────────────────────────────────────────
@@ -39,6 +36,7 @@ const upload = multer({
 
 // ── Simple password middleware ────────────────────────────────────────────────
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "jacob";
+console.log(`[admin] Password configured: ${process.env.ADMIN_PASSWORD ? "from environment" : "using default (jacob)"}`);
 
 function requireAuth(req, res, next) {
   const password = req.headers["x-admin-password"] || req.body?.password;
