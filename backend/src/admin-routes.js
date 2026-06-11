@@ -35,12 +35,11 @@ const upload = multer({
 });
 
 // ── Simple password middleware ────────────────────────────────────────────────
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "jacob";
-console.log(`[admin] Password configured: ${process.env.ADMIN_PASSWORD ? "from environment" : "using default (jacob)"}`);
-
 function requireAuth(req, res, next) {
+  // Read from process.env each time — never cache as a module-level constant
+  const adminPassword = process.env.ADMIN_PASSWORD || "jacob";
   const password = req.headers["x-admin-password"] || req.body?.password;
-  if (password !== ADMIN_PASSWORD) {
+  if (password !== adminPassword) {
     return res.status(401).json({ error: "Unauthorized" });
   }
   next();
