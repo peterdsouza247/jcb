@@ -81,6 +81,34 @@ const mapping = {
       notes:        { type: "text" },
       added_date:   { type: "date", format: "yyyy-MM-dd" },
       createdAt:    { type: "date" },
+
+      // ── Traded record ────────────────────────────────────────────
+      traded: {
+        type: "nested",
+        properties: {
+          to:       { type: "keyword" },   // who you traded with (or "Sold" if sold)
+          date:     { type: "date", format: "yyyy-MM-dd" },
+          for:      { type: "text" },      // what you got in return (comic title or cash)
+          price:    { type: "float" },     // sale price if sold
+          notes:    { type: "text" },
+        },
+      },
+
+      // ── Analysis results (multi-dimensional) ────────────────────
+      recommendation:      { type: "keyword" },
+      trade_score:         { type: "integer" },
+      keep_score:          { type: "integer" },
+      trade_rank:          { type: "integer" },
+      trade_urgency:       { type: "keyword" },  // high | medium | low | none
+      analysis_confidence: { type: "keyword" },
+      analysis_summary:    { type: "text" },
+      value_factors:       { type: "keyword" },
+      market_note:         { type: "text" },
+      analyzed_at:         { type: "date" },
+      dim_intrinsic:       { type: "integer" },  // 0-100 intrinsic value score
+      dim_personal:        { type: "integer" },  // 0-100 personal value score
+      dim_market:          { type: "integer" },  // 0-100 market timing score (high = sell signal)
+      dim_replaceability:  { type: "integer" },  // 0-100 (high = easy to replace)
     },
   },
   settings: { number_of_shards: 1, number_of_replicas: 0 },
@@ -478,17 +506,17 @@ async function setup() {
   console.log("🔌 Connecting to Elasticsearch...");
   try {
     const info = await es.info();
-    console.log(`✅ Connected! ES version: ${info.body?.version?.number || info.version?.number || 'unknown'}`);
+    console.log(`✅ Connected! ES version: ${info.version.number}`);
   } catch (err) {
     console.error("❌ Cannot connect:", err.message);
     process.exit(1);
   }
 
-    const exists = await es.indices.exists({ index: INDEX });
-    if (exists.body) {
-        console.log(`🗑️  Deleting existing '${INDEX}' index...`);
-        await es.indices.delete({ index: INDEX });
-    }
+  const exists = await es.indices.exists({ index: INDEX });
+  if (exists) {
+    console.log(`🗑️  Deleting existing '${INDEX}' index...`);
+    await es.indices.delete({ index: INDEX });
+  }
 
   console.log(`📦 Creating '${INDEX}' index with mapping...`);
   await es.indices.create({ index: INDEX, body: mapping });
@@ -502,18 +530,18 @@ async function setup() {
 
   console.log(`📚 Indexing ${allDocs.length} documents (${collection.length} owned + ${wishList.length} wish list)...`);
 
-  //const operations = allDocs.flatMap(doc => [{ index: { _index: INDEX } }, doc]);
-  //const result = await es.bulk({ refresh: true, body: operations });
-  
-  //if (result.errors) {
-  //  const errors = result.items.filter(i => i.index?.error);
-  //  console.error("❌ Errors:", errors.slice(0, 3));
-  //} else {
-  //  console.log(`✅ Indexed ${allDocs.length} documents.`);
-  //}
+  const operations = allDocs.flatMap(doc => [{ index: { _index: INDEX } }, doc]);
+  const result = await es.bulk({ refresh: true, operations });
+
+  if (result.errors) {
+    const errors = result.items.filter(i => i.index?.error);
+    console.error("❌ Errors:", errors.slice(0, 3));
+  } else {
+    console.log(`✅ Indexed ${allDocs.length} documents.`);
+  }
 
   const count = await es.count({ index: INDEX });
-  console.log(`\n🎉 Index ready with ${count.body.count} documents.`);
+  console.log(`\n🎉 Index ready with ${count.count} documents.`);
 }
 
 setup().catch(console.error);
