@@ -4,12 +4,14 @@ import AnalyticsPage  from "./pages/AnalyticsPage";
 import GiftsPage      from "./pages/GiftsPage";
 import AnalysisPage   from "./pages/AnalysisPage";
 import AdminPage      from "./pages/AdminPage";
+import TradedPage     from "./pages/TradedPage";
 
 const PAGES = [
   { id: "collection", label: "Collection"   },
   { id: "analytics",  label: "Analytics"    },
   { id: "analysis",   label: "Analysis"     },
   { id: "gifts",      label: "Gift History" },
+  { id: "traded",     label: "Trades"       },
   { id: "admin",      label: "⚙️ Admin"      },
 ];
 
@@ -53,6 +55,7 @@ export default function App() {
       {page === "analytics"  && <AnalyticsPage  />}
       {page === "analysis"   && <AnalysisPage   />}
       {page === "gifts"      && <GiftsPage       />}
+      {page === "traded"     && <TradedPage      />}
       {page === "admin"      && <AdminPage       />}
     </>
   );
