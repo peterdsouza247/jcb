@@ -31,6 +31,8 @@ export function useApi() {
     getAnalysis:   () => get("/api/analysis"),
     getGifts:      () => get("/api/gifts"),
     getGiftPeople: () => get("/api/gift-people"),
+    getTraded:     () => get("/api/traded"),
+    addTrade:      (id, data) => patch(`/api/comics/${id}/trade`, data),
     addComic:      (data) => post("/api/comics", data),
     updateComic:   (id, data) => put(`/api/comics/${id}`, data),
     addGift:       (id, data) => patch(`/api/comics/${id}/gift`, data),
