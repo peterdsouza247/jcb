@@ -100,6 +100,10 @@ app.get("/api/comics/search", async (req, res) => {
           wish_list_count: { filter: { term: { on_wish_list: true } } },
           read_count:      { filter: { term: { read: true } } },
           unread_count:    { filter: { bool: { filter: [{ term: { owned: true } }, { term: { read: false } }] } } },
+          traded_count: {
+            nested: { path: "traded" },
+            aggs: { has_trade: { value_count: { field: "traded.to" } } }
+          },
           gifted_to_count: {
             nested: { path: "gifted_to" },
             aggs: { has_gift: { value_count: { field: "gifted_to.person" } } }
@@ -135,12 +139,47 @@ app.get("/api/comics/search", async (req, res) => {
         read:        aggs.read_count.doc_count,
         unread:      aggs.unread_count.doc_count,
         gifted_to:   aggs.gifted_to_count?.has_gift?.value ?? 0,
+        traded:      aggs.traded_count?.has_trade?.value ?? 0,
         by_decade:   aggs.by_decade.buckets,
         total_value: aggs.total_value.value,
       },
     });
   } catch (err) {
     console.error("Search error:", err.meta?.body?.error || err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Traded comics ─────────────────────────────────────────────────────────
+app.get("/api/traded", async (req, res) => {
+  try {
+    const response = await es.search({
+      index: INDEX,
+      body: {
+        query: { nested: { path: "traded", query: { match_all: {} } } },
+        _source: ["title", "series", "publisher", "year", "coverImage", "traded", "tags"],
+        size: 200,
+        sort: [{ year: "desc" }],
+      },
+    });
+    res.json(response.body.hits.hits.map(h => ({ id: h._id, ...h._source })));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Record a trade ─────────────────────────────────────────────────────────
+app.patch("/api/comics/:id/trade", async (req, res) => {
+  try {
+    const { to, date, for: tradedFor, price, notes } = req.body;
+    const doc = await es.get({ index: INDEX, id: req.params.id });
+    const comic = doc.body._source;
+    const traded = [...(comic.traded || []), { to, date, for: tradedFor, price, notes }];
+    await es.update({ index: INDEX, id: req.params.id, body: { doc: { traded } } });
+    await es.indices.refresh({ index: INDEX });
+    const updated = await es.get({ index: INDEX, id: req.params.id });
+    res.json({ id: updated.body._id, ...updated.body._source });
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
@@ -398,8 +437,9 @@ app.get("/api/analysis", async (req, res) => {
         size: 500,
         _source: [
           "title", "series", "publisher", "year", "tags", "coverImage",
-          "recommendation", "trade_score", "keep_score", "trade_rank",
+          "recommendation", "trade_score", "keep_score", "trade_rank", "trade_urgency",
           "analysis_confidence", "analysis_summary", "value_factors", "market_note",
+          "dim_intrinsic", "dim_personal", "dim_market", "dim_replaceability",
           "analyzed_at",
         ],
       }
