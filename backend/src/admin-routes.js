@@ -294,137 +294,207 @@ router.post("/import-list", requireAuth, upload.single("csv"), async (req, res) 
 router.post("/analyze", requireAuth, async (req, res) => {
   const force = req.body?.force === true;
 
-  // Import the scoring function inline (same logic as analyze-collection.js)
-  // We inline it here so the server doesn't need to spawn a child process
-
-  const KEY_SIGNALS = [
-    { match: "dc / marvel",            keep: -5,  trade: 35, confidence: "High",    market: "Only DC/Marvel crossover in 30+ years. Event premiums fade — sell while hot." },
-    { match: "batman / deadpool",      keep: -5,  trade: 35, confidence: "High",    market: "Short-term speculator magnet. Flip window is short." },
-    { match: "superman / spider-man",  keep: -5,  trade: 32, confidence: "High",    market: "Similar to Batman/Deadpool. Flip window is short." },
-    { match: "house of x",             keep: 40, trade: -10, confidence: "High",    market: "HOX/POX demand remains strong — modern key." },
-    { match: "powers of x",            keep: 38, trade: -10, confidence: "High",    market: "Inseparable from HOX in collector perception." },
-    { match: "absolute batman",        keep: 20, trade:   5, confidence: "Medium",  market: "Early issues of prestige runs tend to hold." },
-    { match: "edge of spider-verse",   keep: 30, trade:  -5, confidence: "High",    market: "Gwen Stacy as Spider-Woman firmly established in MCU." },
-    { match: "ultimate spider-man",    keep: 28, trade:  -5, confidence: "High",    market: "Hickman Ultimate Universe generating strong collector interest." },
-    { match: "spider-man: india",      keep: 30, trade:  -5, confidence: "High",    market: "Pavitr in Spider-Verse film. First solo series issues should hold." },
-    { match: "napalm lullaby",         keep: 22, trade:   0, confidence: "Medium",  market: "Remender creator-owned Image work has strong back-issue demand." },
-    { match: "decorum",                keep: 25, trade:  -5, confidence: "Medium",  market: "Hickman completionists will want this. Undervalued sleeper." },
-    { match: "camelot 3000",           keep: 35, trade: -10, confidence: "High",    market: "Bolland pencilled work is rare. Full run genuinely undervalued." },
-    { match: "starman",                keep: 32, trade:  -8, confidence: "High",    market: "One of DC's most praised 90s runs. Still underpriced." },
-    { match: "stormwatch",             keep: 28, trade:  -5, confidence: "High",    market: "Ellis Authority precursor. Wildstorm bridge issues have strong appeal." },
-    { match: "injection",              keep: 22, trade:   0, confidence: "Medium",  market: "Ellis/Shalvey creative pairing has strong demand." },
-    { match: "once & future",          keep: 20, trade:   0, confidence: "Medium",  market: "Dan Mora's stock has risen significantly." },
-    { match: "immortal x-men",         keep: 18, trade:   5, confidence: "Medium",  market: "Krakoa era over. Sinister issues are the prize." },
-    { match: "preacher special",       keep: 18, trade:   5, confidence: "Medium",  market: "Specials harder to find than main series." },
-    { match: "batman and robin",       keep: 18, trade:   5, confidence: "Medium",  market: "Morrison Batman saga — key chapter." },
-    { match: "spawn",                  keep: 25, trade:  -5, confidence: "High",    market: "Early issues consistently perform at auction." },
-    { match: "savage dragon",          keep: 20, trade:   0, confidence: "Medium",  market: "Original issues have steady collector base." },
-    { match: "superpatriot",           keep: 15, trade:   8, confidence: "Low",     market: "Curiosity value for Image completionists." },
-    { match: "king spawn",             keep:  5, trade:  18, confidence: "Medium",  market: "Less iconic than original McFarlane issues." },
-    { match: "eternal warrior",        keep: 25, trade:  -5, confidence: "Medium",  market: "Original Valiant undervalued — slow appreciation." },
-    { match: "generation next",        keep: 28, trade:  -5, confidence: "High",    market: "AoA complete set collectors pay more than sum of parts." },
-    { match: "weapon x",               keep: 22, trade:   0, confidence: "High",    market: "Weapon X within AoA is a key chapter." },
-    { match: "x-man",                  keep: 18, trade:   5, confidence: "Medium",  market: "Origin issues carry the AoA premium." },
-    { match: "detective comics",       keep: 20, trade:   0, confidence: "Medium",  market: "Batman collector base is enormous and consistent." },
-    { match: "world of krypton",       keep: 22, trade:   0, confidence: "Medium",  market: "Pre-Crisis DC limited series are genuinely scarce." },
-    { match: "fury of firestorm",      keep: 12, trade:   8, confidence: "Low",     market: "Niche character with dedicated fans." },
-    { match: "justice league america", keep: 15, trade:   5, confidence: "Medium",  market: "Comedic JLA era has a devoted following." },
-    { match: "catwoman",               keep: 10, trade:  10, confidence: "Medium",  market: "King's Catwoman well-regarded but supply is high." },
-    { match: "superman: son of kal-el", keep: 15, trade:  8, confidence: "Medium",  market: "Jon Kent Superman is here to stay." },
-    { match: "secret history of the authority", keep: 15, trade: 8, confidence: "Medium", market: "Wildstorm completionists collect everything Authority-adjacent." },
-    { match: "amazing spider-man",     keep: 15, trade:   8, confidence: "Medium",  market: "Key issues within run outperform the run average significantly." },
-    { match: "hallows' eve",           keep: 10, trade:  15, confidence: "Medium",  market: "New characters need time to establish value." },
-    { match: "immoral x-men",          keep: 12, trade:  12, confidence: "Medium",  market: "Companion to Immortal X-Men." },
-    { match: "midnight suns",          keep:  8, trade:  18, confidence: "Medium",  market: "Game tie-in. Game underperformed — limited lasting appeal." },
-    { match: "spider-gwen: gwenverse", keep: 10, trade:  15, confidence: "Medium",  market: "Event series — high supply. Core Gwen issues outperform." },
-    { match: "spider-gwen: shadow clones", keep: 10, trade: 15, confidence: "Medium", market: "Not a key chapter for the character." },
-    { match: "patsy walker",           keep: 18, trade:   5, confidence: "Medium",  market: "Low print run. MCU profile lifted demand." },
-    { match: "moon knight",            keep: 18, trade:   5, confidence: "Medium",  market: "MCU surge drove demand. Premium format helps." },
-    { match: "star wars: darth vader", keep: 15, trade:   8, confidence: "Medium",  market: "Prestige format variants trade above standard issues." },
-    { match: "star wars: darth maul",  keep: 14, trade:   8, confidence: "Medium",  market: "Maul has devoted following. Prestige format helps." },
-    { match: "star wars: the mandalorian", keep: 10, trade: 15, confidence: "Medium", market: "Show hype has cooled. High print run." },
-    { match: "wild cards",             keep: 20, trade:   0, confidence: "Medium",  market: "Pre-fame GRRM publication. Niche but intensely sought." },
-    { match: "tomorrow knights",       keep: 12, trade:  10, confidence: "Low",     market: "Too obscure for mainstream demand." },
-    { match: "brzrkr",                 keep: 12, trade:  15, confidence: "Medium",  market: "Celebrity comics peak at launch and correct." },
-    { match: "sonic the hedgehog",     keep:  8, trade:  18, confidence: "Medium",  market: "Archie continuity wiped. Niche nostalgia market." },
-    { match: "edenwood",               keep: 12, trade:  10, confidence: "Low",     market: "New series — market unproven." },
-    { match: "dc's year of the villain", keep: 5, trade: 20, confidence: "High",   market: "Promotional issue. No secondary market value." },
-    { match: "batman day",             keep:  5, trade:  20, confidence: "High",    market: "Free promotional giveaway. Not a collectible." },
-    { match: "radiant black",          keep: 15, trade:   8, confidence: "Medium",  market: "Modest appreciation trajectory." },
-    { match: "adventures of superman", keep: 12, trade:   8, confidence: "Low",     market: "Key issues within the run are the value play." },
+  // ── Knowledge base (multi-dimensional) ──────────────────────────────────
+  const SERIES_KB = [
+    { match: ["dc / marvel","batman / deadpool","superman / spider-man"], intrinsic: 28, market: "peak",     replaceability: "very_hard", confidence: "high",   market_detail: "Only DC/Marvel crossover in 30+ years. Event premiums fade 40-60% within 18 months.", factors: ["Only DC/Marvel crossover since 1996","Historic publishing event","Speculator demand at maximum"] },
+    { match: ["house of x"],                 intrinsic: 40, market: "stable",   replaceability: "moderate",  confidence: "high",   market_detail: "HOX/POX demand durable — already entering back-issue staple territory.", factors: ["Rewrote X-Men continuity","Hickman landmark","CGC submission rate high"] },
+    { match: ["powers of x"],                intrinsic: 38, market: "stable",   replaceability: "moderate",  confidence: "high",   market_detail: "Inseparable from HOX in collector perception. Both or neither.", factors: ["Paired with HOX — complete story","Hickman landmark"] },
+    { match: ["ultimate spider-man"],        intrinsic: 32, market: "rising",   replaceability: "moderate",  confidence: "high",   market_detail: "Hickman Ultimate Universe sustained interest. Early issues likely to appreciate further.", factors: ["Hickman relaunch","Strong critical reception","Early in potential long run"] },
+    { match: ["edge of spider-verse"],       intrinsic: 35, market: "stable",   replaceability: "hard",      confidence: "high",   market_detail: "Gwen Stacy as Ghost-Spider is permanently established post-MCU. Durable demand.", factors: ["Spider-Gwen first appearance context","MCU character","Film franchise"] },
+    { match: ["spider-man: india"],          intrinsic: 30, market: "rising",   replaceability: "hard",      confidence: "high",   market_detail: "Pavitr in Across the Spider-Verse. First solo series for film-featured character. Still early in curve.", factors: ["Spider-Verse film appearance","Culturally significant","First solo series"] },
+    { match: ["absolute batman"],            intrinsic: 22, market: "rising",   replaceability: "moderate",  confidence: "medium", market_detail: "Snyder Batman return — still in rising phase. Watch for key issue developments.", factors: ["Scott Snyder return","Prestige format","Potential long run"] },
+    { match: ["moon knight"],                intrinsic: 22, market: "stable",   replaceability: "hard",      confidence: "medium", market_detail: "MCU surge. Premium format in limited print holding value post-hype.", factors: ["MCU character surge","Black White Blood prestige format"] },
+    { match: ["hallows' eve"],               intrinsic: 12, market: "cooling",  replaceability: "very_easy", confidence: "medium", market_detail: "New character — unproven market. No urgency either way.", factors: ["New character","Market unproven"] },
+    { match: ["midnight suns"],              intrinsic: 8,  market: "dead",     replaceability: "very_easy", confidence: "high",   market_detail: "Game tie-in. Game underperformed. Not on cult classic trajectory.", factors: ["Game tie-in","Game underperformed","High print run"] },
+    { match: ["spider-gwen"],                intrinsic: 15, market: "cooling",  replaceability: "easy",      confidence: "medium", market_detail: "Gwen's popularity real but these event series are not key chapters. Core Gwen outperforms.", factors: ["Character demand real","Event series — high supply"] },
+    { match: ["patsy walker","hellcat"],     intrinsic: 22, market: "stable",   replaceability: "hard",      confidence: "high",   market_detail: "Low print run + MCU profile = durable demand. Already partially appreciated.", factors: ["Kate Leth — cult run","Genuinely low print run","MCU Hellcat appearance"] },
+    { match: ["amazing spider-man"],         intrinsic: 18, market: "stable",   replaceability: "easy",      confidence: "low",    market_detail: "Perpetual demand but perpetual supply. Key appearances vastly outperform run average.", factors: ["Flagship title","Issue-specific value — need to identify keys","High print run"] },
+    { match: ["star wars: darth vader"],     intrinsic: 18, market: "stable",   replaceability: "hard",      confidence: "medium", market_detail: "Vader — most collectible SW character. Prestige format above standard SW issues.", factors: ["Darth Vader demand","Black White Red prestige format"] },
+    { match: ["star wars: darth maul"],      intrinsic: 16, market: "stable",   replaceability: "hard",      confidence: "medium", market_detail: "Maul cult following. Similar to Vader BWR but slightly lower demand.", factors: ["Maul cult following","Black White Red prestige format"] },
+    { match: ["star wars: the mandalorian"], intrinsic: 12, market: "cooling",  replaceability: "very_easy", confidence: "high",   market_detail: "Show hype cooled. High print run = heavy supply. Not a priority hold.", factors: ["Show hype cooled","High print run"] },
+    { match: ["napalm lullaby"],             intrinsic: 20, market: "rising",   replaceability: "hard",      confidence: "medium", market_detail: "Remender creator-owned Image. Low print run likely. Still early in appreciation.", factors: ["Remender creator-owned","Image first issues collect well","Likely low print run"] },
+    { match: ["decorum"],                    intrinsic: 24, market: "stable",   replaceability: "hard",      confidence: "medium", market_detail: "Hickman completionists reliable collector base. Genuine sleeper — undersold at publication.", factors: ["Hickman + Huddleston","Structurally unique","Limited issues"] },
+    { match: ["radiant black"],              intrinsic: 14, market: "stable",   replaceability: "easy",      confidence: "medium", market_detail: "Indie superhero — loyal audience, limited crossover. Slow burner.", factors: ["Kyle Higgins creator-owned","Limited mainstream crossover"] },
+    { match: ["edenwood"],                   intrinsic: 12, market: "rising",   replaceability: "moderate",  confidence: "low",    market_detail: "New series — entirely unproven. Daniel's name carries some weight.", factors: ["Tony Daniel creator-owned","Market completely unproven"] },
+    { match: ["brzrkr"],                     intrinsic: 12, market: "cooling",  replaceability: "very_easy", confidence: "high",   market_detail: "Celebrity comics peak at launch and correct hard. High print run. Correction underway.", factors: ["Celebrity comic","High print run","No ongoing story engine"] },
+    { match: ["camelot 3000"],               intrinsic: 38, market: "stable",   replaceability: "very_hard", confidence: "high",   market_detail: "Bolland pencilled interiors are exceptionally rare. Full run genuinely undervalued.", factors: ["Brian Bolland full interior pencils — extremely rare","1982 prestige format pioneer","Complete 12-issue limited run"] },
+    { match: ["starman"],                    intrinsic: 35, market: "stable",   replaceability: "hard",      confidence: "high",   market_detail: "Omnibus drove renewed interest. One of DC's most literary runs — consistently studied.", factors: ["James Robinson career-defining","Complete run premium substantial","Omnibus validated collector interest"] },
+    { match: ["detective comics"],           intrinsic: 22, market: "stable",   replaceability: "moderate",  confidence: "low",    market_detail: "Value entirely issue/run dependent. Batman collector base enormous.", factors: ["Longest-running DC title","Issue-specific value critical"] },
+    { match: ["batman and robin"],           intrinsic: 20, market: "stable",   replaceability: "moderate",  confidence: "medium", market_detail: "Morrison Batman saga — key chapter. Professor Pyg first appearance in this run.", factors: ["Grant Morrison Batman era","Dick Grayson as Batman","Professor Pyg first appearance"] },
+    { match: ["catwoman"],                   intrinsic: 14, market: "stable",   replaceability: "easy",      confidence: "medium", market_detail: "King run well-regarded but heavily stocked. Not a standout performer.", factors: ["Tom King — acclaimed","High supply","No standout key issues"] },
+    { match: ["superman: son of kal-el"],    intrinsic: 18, market: "stable",   replaceability: "easy",      confidence: "medium", market_detail: "Issue #18 (coming out) is the key. Other issues have modest interest.", factors: ["Jon Kent established character","Issue #18 is genuine key"] },
+    { match: ["world of krypton"],           intrinsic: 26, market: "stable",   replaceability: "hard",      confidence: "high",   market_detail: "First Superman limited series in DC history. Pre-Crisis scarce in high grade.", factors: ["1979 DC — age premium","First Superman limited series","Pre-Crisis collector appeal"] },
+    { match: ["fury of firestorm"],          intrinsic: 14, market: "stable",   replaceability: "moderate",  confidence: "low",    market_detail: "Firestorm cult following keeps demand steady at low level.", factors: ["1980s DC age premium","Firestorm cult character"] },
+    { match: ["justice league america"],     intrinsic: 18, market: "stable",   replaceability: "moderate",  confidence: "medium", market_detail: "Giffen/DeMatteis era is a cult classic. Convention staple.", factors: ["Bwahahaha era — cult classic","Booster/Blue Beetle beloved","Unique comedic tone"] },
+    { match: ["dc's year of the villain"],  intrinsic: 2,  market: "dead",     replaceability: "very_easy", confidence: "high",   market_detail: "Promotional giveaway. Not a collectible.", factors: ["Promotional giveaway","No scarcity","No key issue status"] },
+    { match: ["batman day"],                 intrinsic: 2,  market: "dead",     replaceability: "very_easy", confidence: "high",   market_detail: "Free promotional giveaway. Not a collectible.", factors: ["Free promotional giveaway","No collectible status"] },
+    { match: ["secret history of the authority"], intrinsic: 16, market: "stable", replaceability: "hard",   confidence: "medium", market_detail: "Wildstorm completionists collect everything Authority-adjacent.", factors: ["Authority universe","Limited series"] },
+    { match: ["adventures of superman"],     intrinsic: 14, market: "stable",   replaceability: "moderate",  confidence: "low",    market_detail: "Key issues within the run are the value play.", factors: ["Post-Crisis era","Issue-specific value"] },
+    { match: ["preacher special"],           intrinsic: 20, market: "stable",   replaceability: "hard",      confidence: "medium", market_detail: "Vertigo specials scarcer than main series. TV legacy keeps demand.", factors: ["Vertigo special — scarcer than main series","Ennis/Dillon peak work"] },
+    { match: ["spawn"],                      intrinsic: 30, market: "stable",   replaceability: "hard",      confidence: "high",   market_detail: "Longest-running creator-owned superhero. Early issues consistently perform at auction.", factors: ["Todd McFarlane creator-owned icon","30+ year history","Early issues genuinely scarce in high grade"] },
+    { match: ["savage dragon"],              intrinsic: 22, market: "stable",   replaceability: "hard",      confidence: "medium", market_detail: "Image founder era. Still ongoing — keeps interest alive.", factors: ["Erik Larsen creator-owned","Image founder era","Still ongoing"] },
+    { match: ["superpatriot"],               intrinsic: 14, market: "stable",   replaceability: "hard",      confidence: "low",    market_detail: "Low print run creates real scarcity despite low profile.", factors: ["Early Image — low print run","Genuine scarcity"] },
+    { match: ["king spawn"],                 intrinsic: 10, market: "cooling",  replaceability: "easy",      confidence: "medium", market_detail: "Modern spin-off. Less iconic than McFarlane-era issues.", factors: ["Modern Spawn spin-off","Higher print run than original"] },
+    { match: ["stormwatch"],                 intrinsic: 28, market: "stable",   replaceability: "very_hard", confidence: "high",   market_detail: "Ellis Authority precursor. Most influential late-90s superhero origin. Very hard to find in high grade.", factors: ["Authority precursor — Warren Ellis","Most influential late-90s superhero origin","Extremely hard to find in high grade"] },
+    { match: ["injection"],                  intrinsic: 22, market: "stable",   replaceability: "hard",      confidence: "medium", market_detail: "Incomplete series — only 15 issues. Ellis/Shalvey pairing strong demand.", factors: ["Ellis + Shalvey","Only 15 issues — series ended","Complete run is the target"] },
+    { match: ["once & future"],              intrinsic: 20, market: "rising",   replaceability: "moderate",  confidence: "medium", market_detail: "Dan Mora's profile has risen significantly. Early issues being revisited by collectors.", factors: ["Kieron Gillen + Dan Mora","BOOM! Studios collector following","Dan Mora — rising star"] },
+    { match: ["eternal warrior"],            intrinsic: 26, market: "rising",   replaceability: "hard",      confidence: "medium", market_detail: "Original Valiant Universe undervalued relative to VU peers. Film option interest lifting whole VU.", factors: ["Original Valiant Universe 1992","Low original print run","Valiant originals rising"] },
+    { match: ["generation next"],            intrinsic: 28, market: "stable",   replaceability: "hard",      confidence: "high",   market_detail: "AoA complete set premium. Bachalo art at peak. Keep with other AoA issues.", factors: ["Age of Apocalypse — landmark event","Complete 4-issue run","Chris Bachalo peak art"] },
+    { match: ["weapon x"],                   intrinsic: 24, market: "stable",   replaceability: "hard",      confidence: "high",   market_detail: "Wolverine collector demand is one of the deepest in comics. AoA crossover premium.", factors: ["Weapon X — Wolverine centrepiece","AoA crossover chapter","Wolverine demand is deep"] },
+    { match: ["x-man"],                      intrinsic: 20, market: "stable",   replaceability: "moderate",  confidence: "medium", market_detail: "AoA origin issues carry event premium. Later ongoing is mid-tier.", factors: ["AoA origin — event premium","Nate Grey cult following"] },
+    { match: ["wild cards"],                 intrinsic: 22, market: "stable",   replaceability: "very_hard", confidence: "medium", market_detail: "Pre-fame GRRM material actively sought. Genuinely obscure — real scarcity.", factors: ["George RR Martin IP","Pre-Game of Thrones","Genuinely obscure"] },
+    { match: ["tomorrow knights"],           intrinsic: 12, market: "stable",   replaceability: "very_hard", confidence: "low",    market_detail: "Low print run but demand hasn't materialised. May never.", factors: ["1990 Marvel — low print run","Genuine scarcity","Demand unproven"] },
+    { match: ["sonic the hedgehog"],         intrinsic: 10, market: "cooling",  replaceability: "very_easy", confidence: "medium", market_detail: "Archie continuity wiped. Niche nostalgia market shrinking.", factors: ["Archie continuity ended","Nostalgia-driven only"] },
+    { match: ["immortal x-men"],             intrinsic: 22, market: "stable",   replaceability: "easy",      confidence: "medium", market_detail: "Krakoa era complete. Full run collectible as unit. Sinister issues are the prize.", factors: ["Gillen Krakoa era","Sinister key issues within run","Complete run now possible"] },
+    { match: ["immoral x-men"],              intrinsic: 18, market: "stable",   replaceability: "easy",      confidence: "medium", market_detail: "Companion to Immortal X-Men. Collectors who want one want both.", factors: ["Krakoa era tie-in","Short series"] },
   ];
 
-  function scoreComic(comic) {
-    let keepScore  = 50;
-    let tradeScore = 50;
-    const factors  = [];
-    let confidence = "Medium";
-    let marketNote = "";
-
+  // ── Dimension scoring functions ──────────────────────────────────────────
+  function findKB(comic) {
     const tl = (comic.title  || "").toLowerCase();
     const sl = (comic.series || "").toLowerCase();
+    return SERIES_KB.find(e => e.match.some(m => tl.includes(m) || sl.includes(m)));
+  }
 
-    for (const entry of KEY_SIGNALS) {
-      if (tl.includes(entry.match) || sl.includes(entry.match)) {
-        keepScore  += entry.keep;
-        tradeScore += entry.trade;
-        confidence  = entry.confidence;
-        marketNote  = entry.market;
-        break;
-      }
-    }
+  function detectRunCompletion(allComics) {
+    const bySeries = {};
+    allComics.forEach(c => {
+      if (!c.series) return;
+      if (!bySeries[c.series]) bySeries[c.series] = 0;
+      bySeries[c.series]++;
+    });
+    const signals = {};
+    Object.entries(bySeries).forEach(([s, count]) => {
+      if (count >= 2) signals[s] = { count, bonus: Math.min(15, count * 3), note: `Own ${count} issues — complete run premium` };
+    });
+    return signals;
+  }
 
+  function scoreIntrinsic(comic, kb) {
+    let score = kb ? kb.intrinsic : 15;
+    const notes = [...(kb?.factors || [])];
     if (comic.year) {
-      if      (comic.year < 1980) { keepScore += 25; tradeScore -= 10; factors.push("Pre-1980 — strong age premium"); }
-      else if (comic.year < 1990) { keepScore += 18; tradeScore -= 8;  factors.push("1980s — age premium"); }
-      else if (comic.year < 1995) { keepScore += 10; tradeScore -= 3;  factors.push("Early 1990s"); }
-      else if (comic.year >= 2022){ tradeScore += 5;                   factors.push("Very recent — value still establishing"); }
+      if      (comic.year < 1975) { score += 20; notes.push("Pre-1975 — substantial age premium"); }
+      else if (comic.year < 1980) { score += 15; notes.push("Late 1970s — strong age premium"); }
+      else if (comic.year < 1985) { score += 12; notes.push("Early 1980s — age premium"); }
+      else if (comic.year < 1990) { score += 8;  notes.push("Mid-late 1980s — age premium"); }
+      else if (comic.year < 1993) { score += 5;  notes.push("Early 1990s — modest age premium"); }
     }
-
     const pub = (comic.publisher || "").toLowerCase();
-    if (pub.includes("valiant")  && comic.year < 1997) { keepScore += 12; factors.push("Original Valiant Universe"); }
-    if (pub.includes("image")    && comic.year < 1996) { keepScore += 10; factors.push("Early Image Comics founder era"); }
-    if (pub.includes("vertigo"))                        { keepScore +=  8; factors.push("Vertigo imprint premium"); }
-    if (pub.includes("wildstorm"))                      { keepScore +=  8; factors.push("Wildstorm Ellis era premium"); }
-
-    const tags = comic.tags || [];
-    if (tags.includes("Bluechip"))       { keepScore += 20; tradeScore -= 10; factors.push("Your Bluechip tag"); }
-    if (tags.includes("Sleeper"))        { keepScore += 10;                   factors.push("Your Sleeper tag — upside potential"); }
-    if (tags.includes("Excellent Read")) { keepScore +=  5;                   factors.push("Your Excellent Read tag"); }
-    if (tags.includes("Tradable"))       { tradeScore += 25; keepScore -= 10; factors.push("Your Tradable tag — your instinct says move it"); }
-
-    if (comic.read)          { tradeScore += 4; factors.push("Already read"); }
-    else                     { keepScore  += 3; factors.push("Unread — still has personal reading value"); }
-
-    if ((comic.gifted_to||[]).length > 0) { keepScore +=  8; factors.push("Has gifting history"); }
-    if (comic.gifted_by?.person)          { keepScore += 12; factors.push(`Gift from ${comic.gifted_by.person}`); }
-
+    if (pub.includes("valiant")   && comic.year < 1997) { score += 10; notes.push("Original Valiant Universe"); }
+    if (pub.includes("vertigo"))                         { score +=  6; notes.push("Vertigo imprint premium"); }
+    if (pub.includes("wildstorm"))                       { score +=  6; notes.push("Wildstorm collector premium"); }
+    if (pub.includes("image")     && comic.year < 1996) { score +=  8; notes.push("Early Image founder era"); }
     if (comic.condition) {
       const c = comic.condition.toLowerCase();
-      if (c.includes("near mint") || c.includes("nm")) { keepScore  += 8; factors.push("Near Mint condition"); }
-      else if (c.includes("good") || c.includes("poor")) { tradeScore += 10; factors.push("Lower grade condition"); }
+      if      (c.includes("near mint") || c.includes("nm")) { score += 8; notes.push("Near Mint condition"); }
+      else if (c.includes("good") || c.includes("poor"))    { score -= 5; notes.push("Lower grade condition"); }
     }
+    return { score: Math.max(0, Math.min(100, score)), notes };
+  }
 
-    keepScore  = Math.max(0, Math.min(100, Math.round(keepScore)));
-    tradeScore = Math.max(0, Math.min(100, Math.round(tradeScore)));
+  function scorePersonal(comic, runSignals) {
+    let score = 30;
+    const notes = [];
+    const tags = comic.tags || [];
+    if (tags.includes("Bluechip"))       { score += 30; notes.push("Your Bluechip tag"); }
+    if (tags.includes("Sleeper"))        { score += 15; notes.push("Your Sleeper tag"); }
+    if (tags.includes("Excellent Read")) { score += 10; notes.push("Your Excellent Read tag"); }
+    if (tags.includes("Tradable"))       { score -= 25; notes.push("Your Tradable tag"); }
+    if (!comic.read) { score += 8;  notes.push("Unread — reading value not yet realised"); }
+    else             { score -= 5;  notes.push("Already read"); }
+    if ((comic.gifted_to||[]).length > 0) { score += 10; notes.push("Has gifting provenance"); }
+    if (comic.gifted_by?.person)          { score += 18; notes.push(`Gift from ${comic.gifted_by.person}`); }
+    const run = runSignals[comic.series];
+    if (run) { score += run.bonus; notes.push(run.note); }
+    return { score: Math.max(0, Math.min(100, score)), notes };
+  }
 
-    let recommendation;
-    if      (tradeScore >= 65 || (tags.includes("Tradable") && tradeScore >= 50)) recommendation = "Trade";
-    else if (keepScore  >= 70 || keepScore - tradeScore >= 25)                    recommendation = "Keep Long Term";
-    else                                                                           recommendation = "Keep Short Term";
+  function scoreMarketTiming(kb) {
+    if (!kb) return { score: 50, notes: ["Market timing unassessed"], urgency: "none" };
+    const MAP = {
+      peak:    { score: 80, urgency: "high",   notes: ["Market at PEAK — strong sell signal"] },
+      rising:  { score: 30, urgency: "low",    notes: ["Market RISING — let it appreciate"] },
+      stable:  { score: 45, urgency: "none",   notes: ["Market STABLE — no urgency"] },
+      cooling: { score: 65, urgency: "medium", notes: ["Market COOLING — consider selling"] },
+      dead:    { score: 90, urgency: "high",   notes: ["Market DEAD — no appreciation potential"] },
+    };
+    const r = { ...MAP[kb.market] || MAP.stable };
+    if (kb.market_detail) r.notes.push(kb.market_detail);
+    return r;
+  }
 
-    if (!marketNote) {
-      if      (recommendation === "Trade")           marketNote = "Trade value exceeds long-term appreciation potential.";
-      else if (recommendation === "Keep Long Term")  marketNote = "Strong long-term appreciation potential.";
-      else                                           marketNote = "Hold and monitor — value factors are mixed.";
-    }
+  function scoreReplaceability(kb) {
+    if (!kb) return { score: 50, notes: ["Replaceability unknown"] };
+    const MAP = {
+      very_hard: { score: 10, notes: ["Extremely hard to replace once sold"] },
+      hard:      { score: 25, notes: ["Hard to replace — limited secondary market supply"] },
+      moderate:  { score: 50, notes: ["Moderate replaceability"] },
+      easy:      { score: 75, notes: ["Easy to replace — abundant supply"] },
+      very_easy: { score: 90, notes: ["Very easy to replace"] },
+    };
+    return MAP[kb.replaceability] || MAP.moderate;
+  }
 
-    const uniqueFactors = [...new Set(factors)].slice(0, 8);
-    const summary = recommendation === "Trade"
-      ? `${comic.series||comic.title} scores higher on trade potential (${tradeScore}) than keep value (${keepScore}). ${uniqueFactors[0]||""}`
-      : `${comic.series||comic.title} is a ${recommendation.toLowerCase()} (keep: ${keepScore}). ${uniqueFactors[0]||""} ${uniqueFactors[1]||""}`;
+  function deriveRecommendation(intrinsic, personal, market, replace, kb, comic) {
+    const tags = comic.tags || [];
+    if (tags.includes("Tradable") && personal.score < 40)
+      return { recommendation: "Trade", urgency: "low", reason: "Your Tradable tag combined with low personal value — trust your instinct." };
+    if (comic.gifted_by?.person && personal.score >= 60)
+      return { recommendation: "Keep Long Term", urgency: "none", reason: `Gift from ${comic.gifted_by.person} — sentimental value overrides market signals.` };
+    if (kb?.market === "dead" && intrinsic.score < 20)
+      return { recommendation: "Trade", urgency: "high", reason: kb.market_detail || "No appreciation potential and market is dead." };
 
-    return { recommendation, keep_score: keepScore, trade_score: tradeScore, analysis_confidence: confidence, analysis_summary: summary, value_factors: uniqueFactors, market_note: marketNote, analyzed_at: new Date().toISOString() };
+    const hi  = intrinsic.score >= 55;
+    const hp  = personal.score  >= 55;
+    const mp  = market.score    >= 70;
+    const er  = replace.score   >= 65;
+
+    if (hi && hp)            return { recommendation: "Keep Long Term",  urgency: "none",           reason: "Strong intrinsic and personal value — a core collection piece." };
+    if (hi && !hp && mp && er) return { recommendation: "Trade",         urgency: "high",           reason: "Peak market, low personal attachment, easy to replace. Optimal sell window." };
+    if (hi && !hp && mp)     return { recommendation: "Keep Short Term", urgency: "none",           reason: "Peak market but hard to replace — monitor before deciding." };
+    if (hi && !hp)           return { recommendation: "Keep Short Term", urgency: "none",           reason: "Good intrinsic value. Personal attachment is low but market may improve." };
+    if (!hi && hp)           return { recommendation: "Keep Short Term", urgency: "none",           reason: "Personal value is the primary driver. Keep while it matters to you." };
+    if (!hi && !hp && replace.score <= 30) return { recommendation: "Keep Short Term", urgency: "none", reason: "Low value signals but hard to replace — hold until sure." };
+    return { recommendation: "Trade", urgency: mp ? "high" : "low",     reason: "Low intrinsic and personal value. No strong case for holding." };
+  }
+
+  function scoreComic(comic, runSignals) {
+    const kb        = findKB(comic);
+    const intrinsic = scoreIntrinsic(comic, kb);
+    const personal  = scorePersonal(comic, runSignals);
+    const market    = scoreMarketTiming(kb);
+    const replace   = scoreReplaceability(kb);
+    const { recommendation, urgency, reason } = deriveRecommendation(intrinsic, personal, market, replace, kb, comic);
+
+    const tradeScore = Math.round((market.score * 0.35) + ((100 - intrinsic.score) * 0.25) + ((100 - personal.score) * 0.25) + (replace.score * 0.15));
+    const keepScore  = Math.round((intrinsic.score * 0.40) + (personal.score * 0.30) + ((100 - market.score) * 0.15) + ((100 - replace.score) * 0.15));
+
+    const allFactors = [...new Set([
+      ...intrinsic.notes.slice(0, 3),
+      ...personal.notes.slice(0, 2),
+      ...market.notes.slice(0, 2),
+      ...replace.notes.slice(0, 1),
+    ])].slice(0, 8);
+
+    const issueNote = kb?.issue_notes || "";
+    const summary   = `${reason}${issueNote ? " " + issueNote : ""}`;
+
+    return {
+      recommendation,
+      trade_score:          Math.max(0, Math.min(100, tradeScore)),
+      keep_score:           Math.max(0, Math.min(100, keepScore)),
+      analysis_confidence:  kb?.confidence || "low",
+      analysis_summary:     summary,
+      value_factors:        allFactors,
+      market_note:          kb?.market_detail || "No specific market data for this series.",
+      trade_urgency:        urgency,
+      dim_intrinsic:        intrinsic.score,
+      dim_personal:         personal.score,
+      dim_market:           market.score,
+      dim_replaceability:   replace.score,
+      analyzed_at:          new Date().toISOString(),
+    };
   }
 
   try {
@@ -443,9 +513,20 @@ router.post("/analyze", requireAuth, async (req, res) => {
       return res.json({ success: true, message: force ? "No owned comics found." : "All comics already analyzed.", analyzed: 0 });
     }
 
-    const scored = comics.map(c => ({ id: c.id, result: scoreComic(c) }));
-    scored.sort((a, b) => b.result.trade_score - a.result.trade_score);
-    scored.forEach((item, i) => { item.result.trade_rank = i + 1; });
+    // Build run completion signals
+    const allRes    = await es.search({ index: INDEX, body: { query: { term: { owned: true } }, _source: ["series"], size: 500 } });
+    const allOwned  = allRes.body.hits.hits.map(h => h._source);
+    const runSignals = detectRunCompletion(allOwned);
+
+    const scored = comics.map(c => ({ id: c.id, result: scoreComic(c, runSignals) }));
+
+    // Rank by urgency then trade score
+    const urgencyOrder = { high: 0, medium: 1, low: 2, none: 3 };
+    const rankSorted = [...scored].sort((a, b) => {
+      const ud = (urgencyOrder[a.result.trade_urgency]||3) - (urgencyOrder[b.result.trade_urgency]||3);
+      return ud !== 0 ? ud : b.result.trade_score - a.result.trade_score;
+    });
+    rankSorted.forEach((item, i) => { item.result.trade_rank = i + 1; });
 
     for (const { id, result } of scored) {
       await es.update({ index: INDEX, id, body: { doc: result } });
@@ -458,7 +539,7 @@ router.post("/analyze", requireAuth, async (req, res) => {
 
     res.json({
       success: true,
-      message: `Analysis complete. ${scored.length} comics scored.`,
+      message: `Analysis complete. ${scored.length} comics scored with multi-dimensional engine.`,
       analyzed: scored.length,
       summary: { keep_long: keepLong, keep_short: keepShort, trade },
     });
