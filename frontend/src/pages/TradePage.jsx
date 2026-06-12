@@ -50,7 +50,7 @@ function TradeItem({ comic, onClick }) {
   );
 }
 
-export default function TradedPage() {
+export default function TradePage() {
   const api = useApi();
   const [traded,   setTraded]   = useState(null);
   const [selected, setSelected] = useState(null);
